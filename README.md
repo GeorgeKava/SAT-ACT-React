@@ -1,7 +1,7 @@
 # SAT-ACT React Application
 
 ## Overview
-The **SAT-ACT React Application** is a web-based tool designed to assist students in preparing for the SAT and ACT exams. It provides functionality for solving problems in Math, Chemistry, Physics, SAT-specific sections, and ACT-specific sections. Users can input problems as text or capture them using a live video feed. The application leverages a Flask backend integrated with AI models to process and solve problems. This is based on the MathApp created using Flask and this project now utilizes React.js for frontend part of this web app. It should be noted that the subjects for Math, Chemistry, Physics have been commented out but you can enable them by commenting out the comments in the App.jsx and NavBar.jsx.
+The **SAT-ACT React Application** is a web-based tool designed to assist students in preparing for the SAT and ACT exams. It provides functionality for solving problems in Math, SAT-specific sections, and ACT-specific sections. Users can input problems as text or capture them using a live video feed. The application leverages a Flask backend integrated with AI models to process and solve problems. This is based on the MathApp created using Flask and this project now utilizes React.js for frontend part of this web app.
 
 ---
 
@@ -11,8 +11,6 @@ The **SAT-ACT React Application** is a web-based tool designed to assist student
 - **Live Video Feed**: Allows users to capture problems using their webcam.
 - **Subject-Specific Pages**:
   - Math
-  - Chemistry
-  - Physics
   - SAT
   - ACT
 - **Navigation Bar**: Easy navigation between different subject pages.
@@ -27,8 +25,6 @@ The **SAT-ACT React Application** is a web-based tool designed to assist student
   - Provides detailed, step-by-step solutions.
 - **Endpoints**:
   - `/api/math`
-  - `/api/chemistry`
-  - `/api/physics`
   - `/api/SAT`
   - `/api/ACT`
   - `/api/video_feed` (for live video streaming)
@@ -74,8 +70,6 @@ SAT-ACT-React/
 │   │   ├── components/
 │   │   │   ├── NavBar.js
 │   │   │   ├── MathPage.js
-│   │   │   ├── ChemistryPage.js
-│   │   │   ├── PhysicsPage.js
 │   │   │   ├── SATPage.js
 │   │   │   ├── ACTPage.js
 │   │   ├── App.js
@@ -91,7 +85,7 @@ SAT-ACT-React/
 **Usage**
 
 1. **Navigate to a Subject Page**:
-    * Use the navigation bar to select a subject (Math, Chemistry, Physics, SAT, or ACT).
+    * Use the navigation bar to select a subject (Math, SAT, or ACT).
 
 2. **Submit a Problem**:
     * Enter a problem as text and click "Submit."
