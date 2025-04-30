@@ -5,11 +5,9 @@ import './NavBar.css'; // Optional: Add styles for the NavBar
 function NavBar() {
   return (
     <nav>
-      {/* <Link to="/">Math</Link> */}
-      {/* <Link to="/chemistry">Chemistry</Link> */}
-      {/* <Link to="/physics">Physics</Link> */}
       <Link to="/SAT">SAT</Link>
       <Link to="/ACT">ACT</Link>
+      <Link to="/qa">Q&A</Link>
     </nav>
   );
 }

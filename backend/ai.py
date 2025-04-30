@@ -69,17 +69,21 @@ index_client = SearchIndexClient(
     credential=AzureKeyCredential(search_api_key)
 )
 
+qa_client = AzureOpenAI(
+    api_key=api_key,
+    api_version=api_version,
+    base_url=f"{azure_endpoint}/openai/deployments/{model}"
+)
+
 index_schema = SearchIndex(
     name=index_name,
     fields=[
         SimpleField(name="chunk_id", type="Edm.String", sortable=True,
                     filterable=True, facetable=True, key=True),
-        SearchableField(name="page_content", type="Edm.String",
+        SearchableField(name="question", type="Edm.String",
                         searchable=True, retrievable=True),
-        SearchableField(name="filename",
-                        type="Edm.String", searchable=True, retrievable=True),
-        SearchableField(name="title",
-                type="Edm.String", searchable=True, retrievable=True),
+        SearchableField(name="answer", type="Edm.String", 
+                        searchable=False, retrievable=True),
         SearchField(
             name="contentVector",
             type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
@@ -92,26 +96,27 @@ index_schema = SearchIndex(
 
 def create_vector_search():
     vector_search = VectorSearch(
+        # 1) Your HNSW algos
         algorithms=[
-            HnswAlgorithmConfiguration(
-                name="myHnsw"
-            )
+            HnswAlgorithmConfiguration(name="myHnsw")
         ],
+        # 2) The profile that ties the field to your vectorizer
         profiles=[
             VectorSearchProfile(
                 name="myHnswProfile",
                 algorithm_configuration_name="myHnsw",
-                vectorizer="myVectorizer"
+                vectorizer_name="myVectorizer"        # <<< note this
             )
         ],
+        # 3) Your actual OpenAI vectorizer
         vectorizers=[
             AzureOpenAIVectorizer(
-                name="myVectorizer",
-                azure_open_ai_parameters=AzureOpenAIVectorizerParameters(
-                    resource_uri=azure_endpoint,
-                    deployment_id=embedding_model,
-                    model_name=embedding_model,
-                    api_key=api_key
+                vectorizer_name="myVectorizer",      # <<< and this
+                parameters=AzureOpenAIVectorizerParameters(
+                    resource_uri=azure_endpoint,     # e.g. "https://<your>.openai.azure.com"
+                    api_key=api_key,
+                    deployment_id=embedding_model,   # e.g. "text-embedding-3-small"
+                    model_name=embedding_model       # required in 2024-05-01-preview+
                 )
             )
         ]
@@ -120,10 +125,8 @@ def create_vector_search():
 
 def create_index():
     try:
-        vector_search = create_vector_search()
-        index_schema.vector_search = vector_search
+        index_schema.vector_search = create_vector_search()
         index_client.create_index(index_schema)
-        logging.info(f"Index '{index_name}' created successfully.")
     except Exception as e:
         logging.error(f"Failed to create index: {e}")
         
@@ -277,184 +280,6 @@ def process_text_math_problem(problem):
             {
                 "role": "system",
                 "content": "You are a helpful assistant for solving math problems.",
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-        max_tokens=2000,
-        temperature=0.0,
-    )
-    response_content = response.choices[0].message.content.strip()
-    return response_content
-
-def process_img_llm_chemistry(img_name):
-    client = AzureOpenAI(
-        api_key=api_key,
-        api_version=api_version,
-        base_url=f"{azure_endpoint}/openai/deployments/{model}",
-    )
-    prompt = """You are an expert chemistry assistant. Analyze the image provided and extract any chemistry problems.
-                Solve the chemistry problems and provide detailed solutions.
-                If the problem is a multiple-choice question, first state the correct answer and then provide a detailed explanation.
-                Return the results in the following JSON format:
-                [
-                    {
-                        "problem": "What is the molar mass of H2O?",
-                        "solution": "The molar mass of H2O is 18.015 g/mol."
-                    },
-                    {
-                        "problem": "Balance the equation: H2 + O2 -> H2O",
-                        "solution": "The balanced equation is 2H2 + O2 -> 2H2O."
-                    },
-                    {
-                        "problem": "Which of the following is the molar mass of H2O? (a) 18.015 g/mol (b) 20 g/mol (c) 22 g/mol",
-                        "solution": "The correct answer is (a) 18.015 g/mol. The molar mass of H2O is calculated as follows: 2(1.008) + 15.999 = 18.015 g/mol."
-                    }
-                ]
-            """
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a helpful assistant to analyze chemistry problems.",
-            },
-            {
-                "role": "user",
-                "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": local_image_to_data_url(img_name)},
-                        },
-                ],
-            },
-        ],
-        max_tokens=2000,
-        temperature=0.0,
-    )
-    response_content = response.choices[0].message.content.strip()
-    logging.debug(f"Response content: {response_content}")
-
-    # Attempt to parse the response content as JSON
-    try:
-        response_json = json.loads(response_content)
-        formatted_summary = format_result_for_display(response_json.get("detailed_solutions", []))
-    except json.JSONDecodeError as e:
-        logging.error(f"Failed to parse response as JSON: {e}")
-        response_json = {"error": "Failed to parse response as JSON"}
-        formatted_summary = response_content
-
-    return {
-        "formatted_summary": formatted_summary
-    }
-
-def process_text_chemistry_problem(problem):
-    client = AzureOpenAI(
-        api_key=api_key,
-        api_version=api_version,
-        base_url=f"{azure_endpoint}/openai/deployments/{model}",
-    )
-    prompt = f"""You are an expert chemistry assistant. Solve the following problem:
-                {problem}
-                Provide a detailed solution in plain text."""
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a helpful assistant for solving chemistry problems.",
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-        max_tokens=2000,
-        temperature=0.0,
-    )
-    response_content = response.choices[0].message.content.strip()
-    return response_content
-
-def process_img_llm_physics(img_name):
-    client = AzureOpenAI(
-        api_key=api_key,
-        api_version=api_version,
-        base_url=f"{azure_endpoint}/openai/deployments/{model}",
-    )
-    prompt = """You are an expert physics assistant. Analyze the image provided and extract any physics problems.
-                Solve the physics problems and provide detailed solutions.
-                If the problem is a multiple-choice question, first state the correct answer and then provide a detailed explanation.
-                Return the results in the following JSON format:
-                [
-                    {
-                        "problem": "What is the acceleration of an object with a mass of 5 kg and a force of 20 N applied to it?",
-                        "solution": "The acceleration is calculated using Newton's second law: F = ma. Rearranging, a = F/m = 20 N / 5 kg = 4 m/s²."
-                    },
-                    {
-                        "problem": "What is the gravitational potential energy of a 2 kg object raised to a height of 10 m? (g = 9.8 m/s²)",
-                        "solution": "The gravitational potential energy is calculated as U = mgh. Substituting, U = 2 kg × 9.8 m/s² × 10 m = 196 J."
-                    },
-                    {
-                        "problem": "Which of the following is the correct formula for kinetic energy? (a) KE = 1/2 mv² (b) KE = mv² (c) KE = 1/2 mv",
-                        "solution": "The correct answer is (a) KE = 1/2 mv². Kinetic energy is defined as the energy of motion, and the formula is derived from the work-energy principle."
-                    }
-                ]
-            """
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a helpful assistant to analyze physics problems.",
-            },
-            {
-                "role": "user",
-                "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": local_image_to_data_url(img_name)},
-                        },
-                ],
-            },
-        ],
-        max_tokens=2000,
-        temperature=0.0,
-    )
-    response_content = response.choices[0].message.content.strip()
-    logging.debug(f"Response content: {response_content}")
-
-    # Attempt to parse the response content as JSON
-    try:
-        response_json = json.loads(response_content)
-        formatted_summary = format_result_for_display(response_json.get("detailed_solutions", []))
-    except json.JSONDecodeError as e:
-        logging.error(f"Failed to parse response as JSON: {e}")
-        response_json = {"error": "Failed to parse response as JSON"}
-        formatted_summary = response_content
-
-    return {
-        "formatted_summary": formatted_summary
-    }
-
-def process_text_physics_problem(problem):
-    client = AzureOpenAI(
-        api_key=api_key,
-        api_version=api_version,
-        base_url=f"{azure_endpoint}/openai/deployments/{model}",
-    )
-    prompt = f"""You are an expert physics assistant. Solve the following problem:
-                {problem}
-                Provide a detailed solution in plain text."""
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a helpful assistant for solving physics problems.",
             },
             {
                 "role": "user",
@@ -753,7 +578,122 @@ def process_text_ACT_problem(problem):
     response_content = response.choices[0].message.content.strip()
     return response_content
 
+def extract_qa_and_store(image_path: str):
+    # 1) Define the prompt for extracting Q&A
+    prompt = (
+        "You are an expert assistant. "
+        "Analyze the image and extract all question-and-answer pairs, including the answer choices. "
+        "Return the result in valid JSON format like this: "
+        '[{"question": "What is the capital of France?", "choices": ["Paris", "London", "Berlin", "Madrid"]}]'
+    )
 
+    # 2) Send the image and prompt to the AI model
+    try:
+        resp = qa_client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "You extract Q&A from images."},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": local_image_to_data_url(image_path)}}
+                    ]
+                }
+            ],
+            temperature=0.0
+        )
+    except Exception as e:
+        logging.error(f"Failed to get a response from the AI model: {e}")
+        return {"error": "Failed to get a response from the AI model"}
 
-if __name__ == "__main__":
-    create_index()
+    # 3) Parse the AI model's response
+    try:
+        if not resp.choices or not resp.choices[0].message.content:
+            logging.error("AI model returned an empty response.")
+            logging.error(f"Full AI response: {resp}")
+            return {"error": "AI model returned an empty response"}
+        
+        # Extract the raw response content
+        response_content = resp.choices[0].message.content.strip()
+        logging.debug(f"Raw AI response content: {response_content}")
+
+        # Remove code block markers (```json and ````)
+        if response_content.startswith("```json"):
+            response_content = response_content[7:]  # Remove the opening ```json
+        if response_content.endswith("```"):
+            response_content = response_content[:-3]  # Remove the closing ```
+
+        # Extract only the JSON portion using regex
+        json_match = re.search(r'\[.*\]', response_content, re.DOTALL)  # Match JSON array
+        if not json_match:
+            raise ValueError("No valid JSON array found in the AI response")
+
+        json_str = json_match.group(0)  # Extract the JSON string
+        logging.debug(f"Extracted JSON string: {json_str}")
+
+        # Parse the JSON string
+        qa_list = json.loads(json_str)
+
+        # Validate that each Q&A pair contains the required fields
+        for qa in qa_list:
+            if "question" not in qa or "choices" not in qa:
+                raise ValueError("Missing 'question' or 'choices' in AI response")
+    except (json.JSONDecodeError, ValueError) as e:
+        logging.error(f"Failed to parse AI response as JSON: {e}")
+        logging.error(f"Full AI response: {resp}")
+        return {"error": "Failed to parse AI response", "response": response_content if 'response_content' in locals() else None}
+
+    # 4) Save the extracted Q&A to qa.json
+    json_filename = 'qa.json'
+    try:
+        with open(json_filename, 'r') as json_file:
+            existing_data = json.load(json_file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        existing_data = []  # Initialize as an empty list if the file doesn't exist or is invalid
+
+    # Convert choices into a single string and append to the existing data
+    for qa in qa_list:
+        qa["answer"] = ", ".join(qa["choices"])  # Combine choices into a single string
+        del qa["choices"]  # Remove the choices field
+
+    if isinstance(existing_data, list):
+        existing_data.extend(qa_list)
+    else:
+        existing_data = [existing_data] + qa_list
+
+    with open(json_filename, 'w') as json_file:
+        json.dump(existing_data, json_file, indent=4)
+    logging.info(f"Extracted Q&A saved to {json_filename}")
+
+    # 5) Prepare documents for uploading to the Azure Cognitive Search index
+    documents = []
+    for qa in qa_list:
+        try:
+            doc_id = str(uuid.uuid4())
+            documents.append({
+                "id": doc_id,
+                "question": qa["question"],
+                "answer": qa["answer"]  # Store the combined choices as the answer
+            })
+        except KeyError as e:
+            logging.error(f"Missing key in Q&A pair: {e}")
+            continue
+
+    # 6) Upload documents to the Azure Cognitive Search index
+    try:
+        result = search_client.upload_documents(documents)
+        upload_status = [r.succeeded for r in result]
+        logging.info(f"Uploaded {len(documents)} documents to the index with status: {upload_status}")
+    except Exception as e:
+        logging.error(f"Failed to upload documents to the index: {e}")
+        return {"error": "Failed to upload documents to the index"}
+
+    # 7) Return the extracted Q&A and upload status
+    return {
+        "extracted": qa_list,
+        "vectorUpsert": upload_status
+    }
+
+# if __name__ == "__main__":
+#     create_index()
